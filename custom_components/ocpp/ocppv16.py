@@ -773,7 +773,22 @@ class ChargePoint(cp):
             return False
 
     async def start_transaction(self, connector_id: int = 1):
-        """Remote start a transaction."""
+        """Remote start a transaction unless the connector already has one."""
+        tx_id = int(self._active_tx.get(int(connector_id), 0) or 0)
+        # Single-connector chargers may only have the legacy transaction record.
+        if tx_id == 0 and not self._active_tx:
+            try:
+                n = int(getattr(self, "num_connectors", 0) or 0)
+            except (TypeError, ValueError):
+                n = 0
+            if n == 1 and int(connector_id) in (0, 1):
+                tx_id = int(self.active_transaction_id or 0)
+        if tx_id != 0:
+            _LOGGER.debug(
+                "Transaction %s already active on connector %s", tx_id, connector_id
+            )
+            return True
+
         _LOGGER.info("Start transaction with remote ID tag: %s", self._remote_id_tag)
         req = call.RemoteStartTransaction(
             connector_id=connector_id, id_tag=self._remote_id_tag
